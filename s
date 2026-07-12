@@ -1,4 +1,4 @@
---// ESP Avançado Completo 2026 - Tudo Incluso (Sem tecla Insert)
+--// ESP Avançado Completo - Corrigido (Não fica preso na tela)
 getgenv().ESP = getgenv().ESP or {}
 
 local ESP = getgenv().ESP
@@ -14,7 +14,7 @@ local Cache = {}
 ESP.Settings = {
     Enabled = true,
     ShowBox = true,
-    BoxType = "Corner", -- "Corner" ou "2D"
+    BoxType = "Corner",
     ShowName = true,
     ShowHealth = true,
     ShowDistance = true,
@@ -23,8 +23,8 @@ ESP.Settings = {
     ShowHeadDot = true,
     TeamColor = true,
     WallCheck = false,
-    MaxDistance = 800,
-
+    MaxDistance = 1000,
+    
     BoxColor = Color3.fromRGB(255, 255, 255),
     SkeletonColor = Color3.fromRGB(0, 255, 200),
     TracerColor = Color3.fromRGB(255, 80, 80),
@@ -70,14 +70,22 @@ local function CreateESP(player)
     Cache[player] = esp
 end
 
+local function HideAll(esp)
+    for _, obj in pairs(esp) do
+        if typeof(obj) == "table" then
+            for _, line in ipairs(obj) do
+                if line then line.Visible = false end
+            end
+        elseif obj and typeof(obj) == "Instance" then
+            obj.Visible = false
+        end
+    end
+end
+
 local function RemoveESP(player)
     local esp = Cache[player]
     if not esp then return end
-    for _, v in pairs(esp) do
-        if typeof(v) == "table" then
-            for _, line in ipairs(v) do if line then line:Remove() end end
-        elseif v then v:Remove() end
-    end
+    HideAll(esp)
     Cache[player] = nil
 end
 
@@ -87,24 +95,24 @@ local function UpdateESP()
     for player, esp in pairs(Cache) do
         local char = player.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then
-            for _, obj in pairs(esp) do if typeof(obj) == "Instance" then obj.Visible = false end end
+            HideAll(esp)
             continue
         end
 
         local root = char.HumanoidRootPart
         local head = char:FindFirstChild("Head")
         local humanoid = char:FindFirstChild("Humanoid")
-        if not head or not humanoid then continue end
 
         local distance = (Camera.CFrame.Position - root.Position).Magnitude
         if distance > ESP.Settings.MaxDistance then
-            for _, obj in pairs(esp) do if typeof(obj) == "Instance" then obj.Visible = false end end
+            HideAll(esp)
             continue
         end
 
         local rootPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+
         if not onScreen then
-            for _, obj in pairs(esp) do if typeof(obj) == "Instance" then obj.Visible = false end end
+            HideAll(esp)
             continue
         end
 
@@ -124,12 +132,12 @@ local function UpdateESP()
                 local pts = {
                     {Vector2.new(p.X, p.Y), Vector2.new(p.X + w*0.25, p.Y)},
                     {Vector2.new(p.X, p.Y), Vector2.new(p.X, p.Y + h*0.25)},
-                    {Vector2.new(p.X + w, p.Y), Vector2.new(p.X + w - w*0.25, p.Y)},
-                    {Vector2.new(p.X + w, p.Y), Vector2.new(p.X + w, p.Y + h*0.25)},
-                    {Vector2.new(p.X, p.Y + h), Vector2.new(p.X + w*0.25, p.Y + h)},
-                    {Vector2.new(p.X, p.Y + h), Vector2.new(p.X, p.Y + h - h*0.25)},
-                    {Vector2.new(p.X + w, p.Y + h), Vector2.new(p.X + w - w*0.25, p.Y + h)},
-                    {Vector2.new(p.X + w, p.Y + h), Vector2.new(p.X + w, p.Y + h - h*0.25)},
+                    {Vector2.new(p.X+w, p.Y), Vector2.new(p.X+w - w*0.25, p.Y)},
+                    {Vector2.new(p.X+w, p.Y), Vector2.new(p.X+w, p.Y + h*0.25)},
+                    {Vector2.new(p.X, p.Y+h), Vector2.new(p.X + w*0.25, p.Y+h)},
+                    {Vector2.new(p.X, p.Y+h), Vector2.new(p.X, p.Y+h - h*0.25)},
+                    {Vector2.new(p.X+w, p.Y+h), Vector2.new(p.X+w - w*0.25, p.Y+h)},
+                    {Vector2.new(p.X+w, p.Y+h), Vector2.new(p.X+w, p.Y+h - h*0.25)},
                 }
                 for i, pos in ipairs(pts) do
                     esp.BoxLines[i].From = pos[1]
@@ -137,18 +145,7 @@ local function UpdateESP()
                     esp.BoxLines[i].Color = teamColor
                     esp.BoxLines[i].Visible = true
                 end
-            else
-                esp.Box.Size = boxSize
-                esp.Box.Position = boxPos
-                esp.Box.Color = teamColor
-                esp.Box.Visible = true
-                esp.BoxOutline.Size = boxSize
-                esp.BoxOutline.Position = boxPos
-                esp.BoxOutline.Visible = true
             end
-        else
-            esp.Box.Visible = false
-            esp.BoxOutline.Visible = false
         end
 
         -- Name
@@ -160,16 +157,16 @@ local function UpdateESP()
             esp.Name.Visible = false
         end
 
-        -- Health Bar
+        -- Health
         if ESP.Settings.ShowHealth and humanoid then
-            local healthPerc = humanoid.Health / humanoid.MaxHealth
+            local perc = humanoid.Health / humanoid.MaxHealth
             esp.HealthOutline.From = Vector2.new(boxPos.X - 8, boxPos.Y)
             esp.HealthOutline.To = Vector2.new(boxPos.X - 8, boxPos.Y + boxSize.Y)
             esp.HealthOutline.Visible = true
 
             esp.HealthBar.From = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y)
-            esp.HealthBar.To = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y - (boxSize.Y * healthPerc))
-            esp.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPerc), 255 * healthPerc, 0)
+            esp.HealthBar.To = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y - boxSize.Y * perc)
+            esp.HealthBar.Color = Color3.fromRGB(255*(1-perc), 255*perc, 0)
             esp.HealthBar.Visible = true
         else
             esp.HealthOutline.Visible = false
@@ -178,7 +175,7 @@ local function UpdateESP()
 
         -- Distance
         if ESP.Settings.ShowDistance then
-            esp.Distance.Text = string.format("%.0f studs", distance)
+            esp.Distance.Text = string.format("%.0f", distance)
             esp.Distance.Position = Vector2.new(boxPos.X + boxSize.X/2, boxPos.Y + boxSize.Y + 5)
             esp.Distance.Visible = true
         else
@@ -187,8 +184,8 @@ local function UpdateESP()
 
         -- Head Dot
         if ESP.Settings.ShowHeadDot and head then
-            local headPos = Camera:WorldToViewportPoint(head.Position)
-            esp.HeadDot.Position = Vector2.new(headPos.X, headPos.Y)
+            local hpos = Camera:WorldToViewportPoint(head.Position)
+            esp.HeadDot.Position = Vector2.new(hpos.X, hpos.Y)
             esp.HeadDot.Color = ESP.Settings.HeadDotColor
             esp.HeadDot.Visible = true
         else
@@ -197,10 +194,8 @@ local function UpdateESP()
 
         -- Tracer
         if ESP.Settings.ShowTracer then
-            local y = ESP.Settings.TracerPosition == "Top" and 0 or
-                      ESP.Settings.TracerPosition == "Middle" and Camera.ViewportSize.Y/2 or
-                      Camera.ViewportSize.Y
-            esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, y)
+            local y = ESP.Settings.TracerPosition == "Top" and 0 or ESP.Settings.TracerPosition == "Middle" and Camera.ViewportSize.Y/2 or Camera.ViewportSize.Y
+            esp.Tracer.From = Vector2.new(Camera.ViewportSize.X/2, y)
             esp.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
             esp.Tracer.Color = teamColor
             esp.Tracer.Visible = true
@@ -211,7 +206,7 @@ local function UpdateESP()
         -- Skeleton
         if ESP.Settings.ShowSkeleton then
             if #esp.Skeleton == 0 then
-                for _, bone in ipairs(Bones) do
+                for _ = 1, #Bones do
                     table.insert(esp.Skeleton, CreateDrawing("Line", {Thickness = 1.2, Color = ESP.Settings.SkeletonColor}))
                 end
             end
@@ -248,4 +243,4 @@ Players.PlayerRemoving:Connect(RemoveESP)
 
 RunService.RenderStepped:Connect(UpdateESP)
 
-print("✅ ESP Avançado Completo carregado com sucesso!")
+print("✅ ESP Avançado Corrigido carregado!")
