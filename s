@@ -80,8 +80,13 @@ local function RemoveESP(player)
 end
 
 local function UpdateESP()
-    if not ESP.Settings.Enabled then return end
-
+    if not ESP.Settings.Enabled then
+        for _, esp in pairs(Cache) do
+            HideESP(esp)
+        end
+        return
+    end
+    
     for player, esp in pairs(Cache) do
         local char = player.Character
         
@@ -136,6 +141,9 @@ local function UpdateESP()
                 esp.BoxLines[i].Color = teamColor
                 esp.BoxLines[i].Visible = true
             end
+        else
+            esp.BoxLines.Visible = false
+            esp.BoxOutline.Visible = false
         end
 
         -- Name
@@ -143,6 +151,8 @@ local function UpdateESP()
             esp.Name.Text = player.Name
             esp.Name.Position = Vector2.new(boxPos.X + boxSize.X/2, boxPos.Y - 18)
             esp.Name.Visible = true
+        else
+            esp.Name.Visible = false
         end
 
         -- Health Bar
@@ -156,6 +166,9 @@ local function UpdateESP()
             esp.HealthBar.To = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y - boxSize.Y * perc)
             esp.HealthBar.Color = Color3.fromRGB(255 * (1-perc), 255 * perc, 0)
             esp.HealthBar.Visible = true
+        else
+            esp.HealthBar.Visible = false
+            esp.HealthOutline.Visible = false
         end
 
         -- Distance, HeadDot, Tracer, Skeleton (mesma lógica de Visible = true)
@@ -164,14 +177,11 @@ local function UpdateESP()
             esp.Distance.Text = string.format("%.0f", distance)
             esp.Distance.Position = Vector2.new(boxPos.X + boxSize.X/2, boxPos.Y + boxSize.Y + 5)
             esp.Distance.Visible = true
+        else
+            esp.Distance.Visible = false
         end
 
-        if ESP.Settings.ShowHeadDot and head then
-            local hpos = Camera:WorldToViewportPoint(head.Position)
-            esp.HeadDot.Position = Vector2.new(hpos.X, hpos.Y)
-            esp.HeadDot.Color = ESP.Settings.HeadDotColor
-            esp.HeadDot.Visible = true
-        end
+
 
         -- Tracer and Skeleton (implementados de forma similar)
     end
