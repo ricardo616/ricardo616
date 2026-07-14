@@ -1,4 +1,4 @@
--- ESP Avançado - Suporte Total a Menu (Toggle em tempo real)
+-- ESP Avançado - Full Features + Menu Compatibility
 getgenv().ESP = getgenv().ESP or {}
 local ESP = getgenv().ESP
 
@@ -8,24 +8,31 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local Cache = {}
-local Connections = {}
 
 ESP.Settings = {
-    Enabled = true,
-    ShowBox = true,
-    BoxType = "Corner",
-    ShowName = true,
-    ShowHealth = true,
-    ShowDistance = true,
-    ShowSkeleton = true,
-    ShowTracer = true,
-    ShowHeadDot = true,
+    Enabled = false,
+    ShowName = false,
+    ShowDistance = false,
+    ShowHealth = false,
+    ShowBox = false,
+    ShowTracer = false,
+    ShowSkeleton = false,
+    ShowHeadDot = false,
     TeamColor = true,
-    MaxDistance = 1000,
-    BoxColor = Color3.fromRGB(255, 0, 255),
+    MaxDistance = 1500,
+    BoxColor = Color3.fromRGB(255, 0, 0),
+    TracerColor = Color3.fromRGB(0, 255, 0),
+    SkeletonColor = Color3.fromRGB(255, 255, 255),
 }
 
--- Funções básicas
+local Bones = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"}
+}
+
 local function CreateDrawing(class, props)
     local obj = Drawing.new(class)
     for k, v in pairs(props or {}) do obj[k] = v end
@@ -42,78 +49,69 @@ end
 local function CreateESP(player)
     if player == LocalPlayer or Cache[player] then return end
     
-    Cache[player] = {
+    local esp = {
         BoxLines = {},
         Name = CreateDrawing("Text", {Size = 14, Center = true, Outline = true, Color = Color3.new(1,1,1)}),
         Distance = CreateDrawing("Text", {Size = 12, Center = true, Outline = true, Color = Color3.new(1,1,1)}),
         HeadDot = CreateDrawing("Circle", {Radius = 3.5, Filled = true, Color = Color3.new(1,0,0)}),
         HealthOutline = CreateDrawing("Line", {Thickness = 3, Color = Color3.new(0,0,0)}),
         HealthBar = CreateDrawing("Line", {Thickness = 1.5}),
-        Tracer = CreateDrawing("Line", {Thickness = 2}),
+        Tracer = CreateDrawing("Line", {Thickness = 2, Color = ESP.Settings.TracerColor}),
         Skeleton = {},
     }
+    Cache[player] = esp
 end
 
 local function HideESP(esp)
-    if not esp then return end
-    for _, obj in pairs(esp) do
+    for _, obj in pairs(esp or {}) do
         if typeof(obj) == "table" then
             for _, v in ipairs(obj) do if v then v.Visible = false end end
-        elseif obj and typeof(obj) == "Instance" then
+        elseif obj then
             obj.Visible = false
         end
     end
 end
 
 local function RemoveESP(player)
-    local esp = Cache[player]
-    if esp then
-        HideESP(esp)
+    if Cache[player] then
+        HideESP(Cache[player])
         Cache[player] = nil
     end
 end
 
 local function UpdateESP()
     if not ESP.Settings.Enabled then
-        for _, esp in pairs(Cache) do
-            HideESP(esp)
-        end
+        for _, esp in pairs(Cache) do HideESP(esp) end
         return
     end
 
     for player, esp in pairs(Cache) do
         local char = player.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then
-            HideESP(esp)
-            continue
+            HideESP(esp) continue
         end
 
         local root = char.HumanoidRootPart
+        local head = char:FindFirstChild("Head")
         local humanoid = char:FindFirstChild("Humanoid")
         local distance = (Camera.CFrame.Position - root.Position).Magnitude
 
         if distance > ESP.Settings.MaxDistance then
-            HideESP(esp)
-            continue
+            HideESP(esp) continue
         end
 
         local rootPos, onScreen = Camera:WorldToViewportPoint(root.Position)
-        if not onScreen then
-            HideESP(esp)
-            continue
-        end
+        if not onScreen then HideESP(esp) continue end
 
         local teamColor = GetTeamColor(player)
         local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3,0)).Y - Camera:WorldToViewportPoint(root.Position + Vector3.new(0,2.6,0)).Y) / 2
         local boxSize = Vector2.new(size * 1.9, size * 2.15)
         local boxPos = Vector2.new(rootPos.X - boxSize.X/2, rootPos.Y - boxSize.Y/2)
 
-        -- Box
-        if ESP.Settings.ShowBox and ESP.Settings.BoxType == "Corner" then
+        -- Bounding Box
+        if ESP.Settings.ShowBox then
             if #esp.BoxLines == 0 then
-                for i = 1, 8 do 
-                    esp.BoxLines[i] = CreateDrawing("Line", {Thickness = 1.5}) 
-                end
+                for i = 1, 8 do esp.BoxLines[i] = CreateDrawing("Line", {Thickness = 1.5}) end
             end
             local w, h = boxSize.X, boxSize.Y
             local p = boxPos
@@ -146,13 +144,21 @@ local function UpdateESP()
             esp.Name.Visible = false
         end
 
+        -- Distance
+        if ESP.Settings.ShowDistance then
+            esp.Distance.Text = string.format("%.0f", distance) .. "m"
+            esp.Distance.Position = Vector2.new(boxPos.X + boxSize.X/2, boxPos.Y + boxSize.Y + 5)
+            esp.Distance.Visible = true
+        else
+            esp.Distance.Visible = false
+        end
+
         -- Health
         if ESP.Settings.ShowHealth and humanoid then
             local perc = humanoid.Health / humanoid.MaxHealth
             esp.HealthOutline.From = Vector2.new(boxPos.X - 8, boxPos.Y)
             esp.HealthOutline.To = Vector2.new(boxPos.X - 8, boxPos.Y + boxSize.Y)
             esp.HealthOutline.Visible = true
-            
             esp.HealthBar.From = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y)
             esp.HealthBar.To = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y - boxSize.Y * perc)
             esp.HealthBar.Color = Color3.fromRGB(255 * (1-perc), 255 * perc, 0)
@@ -162,25 +168,52 @@ local function UpdateESP()
             esp.HealthBar.Visible = false
         end
 
-        -- Distance
-        if ESP.Settings.ShowDistance then
-            esp.Distance.Text = string.format("%.0f", distance) .. "m"
-            esp.Distance.Position = Vector2.new(boxPos.X + boxSize.X/2, boxPos.Y + boxSize.Y + 5)
-            esp.Distance.Visible = true
+        -- Head Dot
+        if ESP.Settings.ShowHeadDot and head then
+            local headPos = Camera:WorldToViewportPoint(head.Position)
+            esp.HeadDot.Position = Vector2.new(headPos.X, headPos.Y)
+            esp.HeadDot.Visible = true
         else
-            esp.Distance.Visible = false
+            esp.HeadDot.Visible = false
+        end
+
+        -- Tracer
+        if ESP.Settings.ShowTracer then
+            esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+            esp.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
+            esp.Tracer.Color = ESP.Settings.TracerColor
+            esp.Tracer.Visible = true
+        else
+            esp.Tracer.Visible = false
+        end
+
+        -- Skeleton
+        if ESP.Settings.ShowSkeleton then
+            for i, bonePair in ipairs(Bones) do
+                local part1 = char:FindFirstChild(bonePair[1])
+                local part2 = char:FindFirstChild(bonePair[2])
+                if part1 and part2 then
+                    if not esp.Skeleton[i] then
+                        esp.Skeleton[i] = CreateDrawing("Line", {Thickness = 1.5, Color = ESP.Settings.SkeletonColor})
+                    end
+                    local pos1 = Camera:WorldToViewportPoint(part1.Position)
+                    local pos2 = Camera:WorldToViewportPoint(part2.Position)
+                    esp.Skeleton[i].From = Vector2.new(pos1.X, pos1.Y)
+                    esp.Skeleton[i].To = Vector2.new(pos2.X, pos2.Y)
+                    esp.Skeleton[i].Visible = true
+                end
+            end
+        else
+            for _, line in ipairs(esp.Skeleton) do if line then line.Visible = false end end
         end
     end
 end
 
 -- Inicialização
-for _, plr in ipairs(Players:GetPlayers()) do
-    CreateESP(plr)
-end
-
+for _, plr in ipairs(Players:GetPlayers()) do CreateESP(plr) end
 Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
 
 RunService.RenderStepped:Connect(UpdateESP)
 
-print("✅ ESP com suporte total a Menu carregado!")
+print("✅ ESP Full Features Carregado!")
