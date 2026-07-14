@@ -1,4 +1,4 @@
--- ESP Avançado - Full Features + Menu Compatibility
+-- ESP Avançado - Suporte workspace.Players + game.Players (Full Features)
 getgenv().ESP = getgenv().ESP or {}
 local ESP = getgenv().ESP
 
@@ -18,7 +18,7 @@ ESP.Settings = {
     ShowTracer = false,
     ShowSkeleton = false,
     ShowHeadDot = false,
-    TeamColor = true,
+    TeamColor = false,
     MaxDistance = 1500,
     BoxColor = Color3.fromRGB(255, 0, 0),
     TracerColor = Color3.fromRGB(0, 255, 0),
@@ -39,17 +39,27 @@ local function CreateDrawing(class, props)
     return obj
 end
 
-local function GetTeamColor(player)
-    if ESP.Settings.TeamColor and player.Team then
-        return player.Team.TeamColor.Color
+local function GetCharacter(playerName)
+    -- Normal Roblox
+    local plr = Players:FindFirstChild(playerName)
+    if plr and plr.Character then
+        return plr.Character
     end
-    return ESP.Settings.BoxColor
+    
+    -- Custom Folder (muitos jogos usam isso)
+    local folder = workspace:FindFirstChild("Players")
+    if folder then
+        local model = folder:FindFirstChild(playerName)
+        if model then
+            return model
+        end
+    end
+    return nil
 end
 
-local function CreateESP(player)
-    if player == LocalPlayer or Cache[player] then return end
-    
-    local esp = {
+local function CreateESP(playerName)
+    if Cache[playerName] then return end
+    Cache[playerName] = {
         BoxLines = {},
         Name = CreateDrawing("Text", {Size = 14, Center = true, Outline = true, Color = Color3.new(1,1,1)}),
         Distance = CreateDrawing("Text", {Size = 12, Center = true, Outline = true, Color = Color3.new(1,1,1)}),
@@ -59,7 +69,6 @@ local function CreateESP(player)
         Tracer = CreateDrawing("Line", {Thickness = 2, Color = ESP.Settings.TracerColor}),
         Skeleton = {},
     }
-    Cache[player] = esp
 end
 
 local function HideESP(esp)
@@ -72,25 +81,23 @@ local function HideESP(esp)
     end
 end
 
-local function RemoveESP(player)
-    if Cache[player] then
-        HideESP(Cache[player])
-        Cache[player] = nil
-    end
-end
-
 local function UpdateESP()
     if not ESP.Settings.Enabled then
         for _, esp in pairs(Cache) do HideESP(esp) end
         return
     end
 
-    for player, esp in pairs(Cache) do
-        local char = player.Character
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local playerName = plr.Name
+
+        local char = GetCharacter(playerName)
         if not char or not char:FindFirstChild("HumanoidRootPart") then
-            HideESP(esp) continue
+            if Cache[playerName] then HideESP(Cache[playerName]) end
+            continue
         end
 
+        local esp = Cache[playerName] or CreateESP(playerName)
         local root = char.HumanoidRootPart
         local head = char:FindFirstChild("Head")
         local humanoid = char:FindFirstChild("Humanoid")
@@ -103,7 +110,8 @@ local function UpdateESP()
         local rootPos, onScreen = Camera:WorldToViewportPoint(root.Position)
         if not onScreen then HideESP(esp) continue end
 
-        local teamColor = GetTeamColor(player)
+        local teamColor = ESP.Settings.TeamColor and (plr.Team and plr.Team.TeamColor.Color or ESP.Settings.BoxColor) or ESP.Settings.BoxColor
+
         local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3,0)).Y - Camera:WorldToViewportPoint(root.Position + Vector3.new(0,2.6,0)).Y) / 2
         local boxSize = Vector2.new(size * 1.9, size * 2.15)
         local boxPos = Vector2.new(rootPos.X - boxSize.X/2, rootPos.Y - boxSize.Y/2)
@@ -137,7 +145,7 @@ local function UpdateESP()
 
         -- Name
         if ESP.Settings.ShowName then
-            esp.Name.Text = player.Name
+            esp.Name.Text = playerName
             esp.Name.Position = Vector2.new(boxPos.X + boxSize.X/2, boxPos.Y - 18)
             esp.Name.Visible = true
         else
@@ -210,10 +218,14 @@ local function UpdateESP()
 end
 
 -- Inicialização
-for _, plr in ipairs(Players:GetPlayers()) do CreateESP(plr) end
-Players.PlayerAdded:Connect(CreateESP)
-Players.PlayerRemoving:Connect(RemoveESP)
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then CreateESP(plr.Name) end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    if plr ~= LocalPlayer then CreateESP(plr.Name) end
+end)
 
 RunService.RenderStepped:Connect(UpdateESP)
 
-print("✅ ESP Full Features Carregado!")
+print("✅ ESP Completo carregado! (Suporte a workspace.Players)")
