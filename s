@@ -1,3 +1,4 @@
+-- ESP Avançado - Suporte Total a Menu (Toggle em tempo real)
 getgenv().ESP = getgenv().ESP or {}
 local ESP = getgenv().ESP
 
@@ -7,6 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local Cache = {}
+local Connections = {}
 
 ESP.Settings = {
     Enabled = true,
@@ -20,17 +22,10 @@ ESP.Settings = {
     ShowHeadDot = true,
     TeamColor = true,
     MaxDistance = 1000,
-    BoxColor = Color3.fromRGB(255, 0, 255), -- Cor padrão caso TeamColor = false
+    BoxColor = Color3.fromRGB(255, 0, 255),
 }
 
-local Bones = {
-    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
-    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
-    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
-    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
-    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"}
-}
-
+-- Funções básicas
 local function CreateDrawing(class, props)
     local obj = Drawing.new(class)
     for k, v in pairs(props or {}) do obj[k] = v end
@@ -45,29 +40,26 @@ local function GetTeamColor(player)
 end
 
 local function CreateESP(player)
-    if Cache[player] then return end
+    if player == LocalPlayer or Cache[player] then return end
     
-    local esp = {
+    Cache[player] = {
         BoxLines = {},
         Name = CreateDrawing("Text", {Size = 14, Center = true, Outline = true, Color = Color3.new(1,1,1)}),
         Distance = CreateDrawing("Text", {Size = 12, Center = true, Outline = true, Color = Color3.new(1,1,1)}),
-        HeadDot = CreateDrawing("Circle", {Radius = 3.5, Filled = true}),
+        HeadDot = CreateDrawing("Circle", {Radius = 3.5, Filled = true, Color = Color3.new(1,0,0)}),
         HealthOutline = CreateDrawing("Line", {Thickness = 3, Color = Color3.new(0,0,0)}),
         HealthBar = CreateDrawing("Line", {Thickness = 1.5}),
-        Tracer = CreateDrawing("Line", {Thickness = 2, Color = Color3.new(1,1,1)}),
+        Tracer = CreateDrawing("Line", {Thickness = 2}),
         Skeleton = {},
     }
-    Cache[player] = esp
 end
 
 local function HideESP(esp)
     if not esp then return end
     for _, obj in pairs(esp) do
         if typeof(obj) == "table" then
-            for _, v in ipairs(obj) do
-                if v then v.Visible = false end
-            end
-        elseif obj then
+            for _, v in ipairs(obj) do if v then v.Visible = false end end
+        elseif obj and typeof(obj) == "Instance" then
             obj.Visible = false
         end
     end
@@ -83,7 +75,9 @@ end
 
 local function UpdateESP()
     if not ESP.Settings.Enabled then
-        for _, esp in pairs(Cache) do HideESP(esp) end
+        for _, esp in pairs(Cache) do
+            HideESP(esp)
+        end
         return
     end
 
@@ -95,10 +89,9 @@ local function UpdateESP()
         end
 
         local root = char.HumanoidRootPart
-        local head = char:FindFirstChild("Head")
         local humanoid = char:FindFirstChild("Humanoid")
-        
         local distance = (Camera.CFrame.Position - root.Position).Magnitude
+
         if distance > ESP.Settings.MaxDistance then
             HideESP(esp)
             continue
@@ -111,17 +104,15 @@ local function UpdateESP()
         end
 
         local teamColor = GetTeamColor(player)
-        local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3,0)).Y - 
-                     Camera:WorldToViewportPoint(root.Position + Vector3.new(0,2.6,0)).Y) / 2
-        
+        local size = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3,0)).Y - Camera:WorldToViewportPoint(root.Position + Vector3.new(0,2.6,0)).Y) / 2
         local boxSize = Vector2.new(size * 1.9, size * 2.15)
         local boxPos = Vector2.new(rootPos.X - boxSize.X/2, rootPos.Y - boxSize.Y/2)
 
-        -- Box Corner
+        -- Box
         if ESP.Settings.ShowBox and ESP.Settings.BoxType == "Corner" then
             if #esp.BoxLines == 0 then
-                for i = 1, 8 do
-                    esp.BoxLines[i] = CreateDrawing("Line", {Thickness = 1.5, Color = teamColor})
+                for i = 1, 8 do 
+                    esp.BoxLines[i] = CreateDrawing("Line", {Thickness = 1.5}) 
                 end
             end
             local w, h = boxSize.X, boxSize.Y
@@ -142,6 +133,8 @@ local function UpdateESP()
                 esp.BoxLines[i].Color = teamColor
                 esp.BoxLines[i].Visible = true
             end
+        else
+            for _, line in ipairs(esp.BoxLines) do if line then line.Visible = false end end
         end
 
         -- Name
@@ -159,7 +152,7 @@ local function UpdateESP()
             esp.HealthOutline.From = Vector2.new(boxPos.X - 8, boxPos.Y)
             esp.HealthOutline.To = Vector2.new(boxPos.X - 8, boxPos.Y + boxSize.Y)
             esp.HealthOutline.Visible = true
-
+            
             esp.HealthBar.From = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y)
             esp.HealthBar.To = Vector2.new(boxPos.X - 7, boxPos.Y + boxSize.Y - boxSize.Y * perc)
             esp.HealthBar.Color = Color3.fromRGB(255 * (1-perc), 255 * perc, 0)
@@ -177,43 +170,17 @@ local function UpdateESP()
         else
             esp.Distance.Visible = false
         end
-
-        -- TODO: Adicione aqui Skeleton, Tracer e HeadDot da mesma forma (Visible = true)
     end
-end
-
--- ==================== GERENCIAMENTO DE RESET ====================
-local function OnCharacterAdded(player, char)
-    -- Espera o personagem carregar completamente
-    char:WaitForChild("HumanoidRootPart", 5)
-    -- O UpdateESP já vai detectar automaticamente o novo character
-end
-
-local function SetupPlayer(player)
-    if player == LocalPlayer then return end
-    CreateESP(player)
-    
-    if player.Character then
-        OnCharacterAdded(player, player.Character)
-    end
-    
-    player.CharacterAdded:Connect(function(char)
-        OnCharacterAdded(player, char)
-    end)
-    
-    player.CharacterRemoving:Connect(function()
-        HideESP(Cache[player])
-    end)
 end
 
 -- Inicialização
 for _, plr in ipairs(Players:GetPlayers()) do
-    SetupPlayer(plr)
+    CreateESP(plr)
 end
 
-Players.PlayerAdded:Connect(SetupPlayer)
+Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
 
 RunService.RenderStepped:Connect(UpdateESP)
 
-print("✅ ESP Avançado carregado! (Não some ao resetar)")
+print("✅ ESP com suporte total a Menu carregado!")
